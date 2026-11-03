@@ -1,0 +1,22 @@
+{
+  "exam_requirements": [
+    [
+      "computers"
+    ],
+    []
+  ],
+  "room_facilities": [
+    [
+      "computers"
+    ]
+  ],
+  "exam_durations": [
+    90,
+    60
+  ],
+  "slot_durations": [
+    60,
+    90,
+    120
+  ]
+}

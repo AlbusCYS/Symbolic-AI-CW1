@@ -1,0 +1,10 @@
+sat1.txt     unique solution
+sat2.txt     multiple solutions
+sat3.txt     multiple solutions
+sat4.txt     unique solution
+sat5.txt     multiple solutions
+sat6.txt     multiple solutions
+sat7.txt     multiple solutions
+sat8.txt     multiple solutions
+sat9.txt     multiple solutions
+sat10.txt    multiple solutions
