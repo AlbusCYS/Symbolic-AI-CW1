@@ -1,13 +1,37 @@
 """Check the shared companion-file contract used by both formulations."""
 
 import json
+import importlib.util
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from formulation2 import solve_boolean
 from shared_input import load_metadata, read_file
-from test_formulation2 import ROOT, make_instance
+
+ROOT = Path(__file__).resolve().parent.parent
+SOLVER_PATH = ROOT / "Formulation 1.py"
+SPEC = importlib.util.spec_from_file_location("formulation1", SOLVER_PATH)
+FORMULATION1 = importlib.util.module_from_spec(SPEC)
+assert SPEC.loader is not None
+SPEC.loader.exec_module(FORMULATION1)
+
+solve_integer = FORMULATION1.solve_integer
+Instance = FORMULATION1.Instance
+
+
+def make_instance(exams, slots, capacities, registrations=(), students=None):
+    """Create a small instance for shared-input validation tests."""
+    instance = Instance()
+    instance.number_of_students = (
+        students if students is not None
+        else max((student for _, student in registrations), default=-1) + 1
+    )
+    instance.number_of_exams = exams
+    instance.number_of_slots = slots
+    instance.number_of_rooms = len(capacities)
+    instance.room_capacities = list(capacities)
+    instance.exams_to_students = list(registrations)
+    return instance
 
 
 class SharedInputTests(unittest.TestCase):
@@ -38,7 +62,7 @@ class SharedInputTests(unittest.TestCase):
         self.assertEqual(instance.room_facilities, [set()])
         self.assertEqual(instance.exam_durations, [60, 60])
         self.assertEqual(instance.slot_durations, [120, 120, 120])
-        self.assertEqual(solve_boolean(instance)["metadata_mode"], "baseline")
+        self.assertEqual(solve_integer(instance)["metadata_mode"], "baseline")
 
     def test_companion_is_discovered_and_baseline_can_be_requested(self):
         with TemporaryDirectory(dir=ROOT) as directory:
@@ -50,8 +74,8 @@ class SharedInputTests(unittest.TestCase):
             extended = read_file(path)
             baseline = read_file(path, baseline=True)
             self.assertEqual(extended.metadata_mode, "extended")
-            self.assertEqual(solve_boolean(extended)["status"], "unsat")
-            self.assertEqual(solve_boolean(baseline)["status"], "sat")
+            self.assertEqual(solve_integer(extended)["status"], "unsat")
+            self.assertEqual(solve_integer(baseline)["status"], "sat")
 
     def test_explicit_missing_file_is_an_error(self):
         with TemporaryDirectory(dir=ROOT) as directory:
@@ -90,7 +114,7 @@ class SharedInputTests(unittest.TestCase):
         instance = make_instance(1, 1, [1], [(0, 0)])
         instance.exam_requirements = [["computers"]]
         with self.assertRaises(ValueError):
-            solve_boolean(instance)
+            solve_integer(instance)
 
     def test_invalid_present_json_is_not_silently_ignored(self):
         with TemporaryDirectory(dir=ROOT) as directory:

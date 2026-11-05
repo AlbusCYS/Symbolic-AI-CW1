@@ -5,7 +5,7 @@ import random
 import unittest
 
 from formulation2 import read_file, solve_boolean
-from test_formulation2 import ROOT, make_instance
+from tests.test_formulation2 import ROOT, make_instance
 from timetable_check import validate_timetable
 
 

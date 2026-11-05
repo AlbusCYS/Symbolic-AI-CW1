@@ -1,4 +1,4 @@
-"""Baseline checks and measurements for the C1-C8 integer formulation."""
+"""Baseline checks and measurements for the C1-C8 Boolean formulation."""
 
 import csv
 import itertools
@@ -9,23 +9,14 @@ import random
 import subprocess
 import sys
 import unittest
-import importlib.util
 
 import z3
 
-SOLVER_PATH = Path(__file__).resolve().parent / "Formulation 1.py"
-SPEC = importlib.util.spec_from_file_location("formulation1", SOLVER_PATH)
-FORMULATION1 = importlib.util.module_from_spec(SPEC)
-assert SPEC.loader is not None
-SPEC.loader.exec_module(FORMULATION1)
-
-Instance = FORMULATION1.Instance
-read_file = FORMULATION1.read_file
-solve_integer = FORMULATION1.solve_integer
+from formulation2 import Instance, read_file, solve_boolean
 from timetable_check import validate_timetable
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 
 
 def make_instance(exams, slots, capacities, registrations=(), students=None):
@@ -62,22 +53,24 @@ def exhaustive_status(instance):
     return "unsat"
 
 
-class IntegerSolverTests(unittest.TestCase):
+class BooleanSolverTests(unittest.TestCase):
     def check_sat(self, instance):
-        result = solve_integer(instance)
+        result = solve_boolean(instance)
         self.assertEqual(result["status"], "sat")
         validate_timetable(instance, result["timetable"])
         self.assertGreaterEqual(result["solve_time_ms"], 0)
         self.assertGreaterEqual(result["build_time_ms"], 0)
         self.assertEqual(
             result["variable_count"],
-            2 * instance.number_of_exams,
+            instance.number_of_exams
+            * instance.number_of_slots
+            * instance.number_of_rooms,
         )
         self.assertGreaterEqual(result["constraint_count"], 0)
         return result
 
     def check_unsat(self, instance):
-        result = solve_integer(instance)
+        result = solve_boolean(instance)
         self.assertEqual(result["status"], "unsat")
         self.assertIsNone(result["timetable"])
 
@@ -137,7 +130,7 @@ class IntegerSolverTests(unittest.TestCase):
             with self.subTest(registration=registration):
                 instance = make_instance(1, 1, [1], [registration], students=1)
                 with self.assertRaises(ValueError):
-                    solve_integer(instance)
+                    solve_boolean(instance)
 
     def test_invalid_counts_or_capacities_are_rejected(self):
         bad_count = make_instance(-1, 1, [1])
@@ -147,13 +140,13 @@ class IntegerSolverTests(unittest.TestCase):
         for instance in (bad_count, bad_capacity, missing_capacity):
             with self.subTest(instance=vars(instance)):
                 with self.assertRaises(ValueError):
-                    solve_integer(instance)
+                    solve_boolean(instance)
 
     def test_command_line_prints_sat_timetable_and_timing(self):
         env = os.environ.copy()
         env["PYTHONPATH"] = str(Path(z3.__file__).resolve().parent.parent)
         completed = subprocess.run(
-            [sys.executable, str(ROOT / "Formulation 1.py"),
+            [sys.executable, str(ROOT / "formulation2.py"),
              str(ROOT / "instances" / "sat1.txt")],
             capture_output=True, text=True, env=env, check=False,
         )
@@ -166,7 +159,7 @@ class IntegerSolverTests(unittest.TestCase):
         env = os.environ.copy()
         env["PYTHONPATH"] = str(Path(z3.__file__).resolve().parent.parent)
         completed = subprocess.run(
-            [sys.executable, str(ROOT / "Formulation 1.py"),
+            [sys.executable, str(ROOT / "formulation2.py"),
              str(ROOT / "instances" / "unsat1.txt")],
             capture_output=True, text=True, env=env, check=False,
         )
@@ -189,7 +182,7 @@ class IntegerSolverTests(unittest.TestCase):
                 students=students,
             )
             with self.subTest(case=case, instance=vars(instance)):
-                result = solve_integer(instance)
+                result = solve_boolean(instance)
                 self.assertEqual(result["status"], exhaustive_status(instance))
                 if result["status"] == "sat":
                     validate_timetable(instance, result["timetable"])
@@ -201,7 +194,7 @@ class IntegerSolverTests(unittest.TestCase):
             with self.subTest(instance=path.name):
                 instance = read_file(path)
                 expected = "unsat" if path.stem.startswith("unsat") else "sat"
-                result = solve_integer(instance)
+                result = solve_boolean(instance)
                 self.assertEqual(result["status"], expected)
                 if result["status"] == "sat":
                     validate_timetable(instance, result["timetable"])
@@ -214,7 +207,7 @@ def benchmark():
     paths += sorted((ROOT / "examples").glob("*.txt"))
     for path in paths:
         instance = read_file(path)
-        result = solve_integer(instance)
+        result = solve_boolean(instance)
         expected = "unsat" if path.stem.startswith("unsat") else "sat"
         if result["status"] == "sat":
             validate_timetable(instance, result["timetable"])
@@ -233,8 +226,8 @@ def benchmark():
         })
         print(f'{path.name:12} {result["status"]:7} '
               f'{result["solve_time_ms"]:9.3f} ms  '
-              f'{result["variable_count"]:4} Integer variables')
-    output = ROOT / "results_c1_c8.csv"
+              f'{result["variable_count"]:4} Boolean variables')
+    output = ROOT / "results" / "results_c1_c8_F2.csv"
     with output.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
         writer.writeheader()
