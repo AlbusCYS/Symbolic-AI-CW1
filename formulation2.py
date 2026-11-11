@@ -25,7 +25,6 @@ def solve_boolean(instance):
     solve_time_ms measures only solver.check().
     """
     build_start = perf_counter()
-    students = instance.number_of_students
     exams = instance.number_of_exams
     slots = instance.number_of_slots
     rooms = instance.number_of_rooms
@@ -73,7 +72,7 @@ def solve_boolean(instance):
                     solver.add(z3.Not(X[exam, slot, room]))
 
     # C8: an exam must fit within one slot. Equality is allowed. C1 still
-    # prevent splitting across slots; C2 still reserves the room for the slot.
+    # prevents splitting across slots; C2 still reserves the room for the slot.
     for exam in range(exams):
         for slot in range(slots):
             if instance.exam_durations[exam] > instance.slot_durations[slot]:
@@ -151,9 +150,9 @@ if __name__ == '__main__':
         raise SystemExit(f"Input error: {error}") from error
     print(result["status"])
     if result["metadata_mode"] == "baseline":
-        print("Data mode: baseline (synthetic neutral defaults; C7/C8 are nonbinding)")
+        print("Data mode: baseline (neutral C6/C7/C8 defaults)")
     else:
-        print("Data mode: extended (facilities C7 and duration C8)")
+        print("Data mode: extended (C6/C7/C8 metadata)")
     if result["status"] == "sat":
         print("Exam\tTimeslot\tRoom")
         for exam, slot, room in result["timetable"]:
@@ -162,6 +161,6 @@ if __name__ == '__main__':
         print(f'Reason: {result["reason_unknown"]}')
     print(f'Solving time (ms): {result["solve_time_ms"]:.3f}')
     print(f'Model construction time (ms): {result["build_time_ms"]:.3f}')
-    print(f'Boolean variables: {result["variable_count"]}')
+    print(f'Decision variables: {result["variable_count"]}')
     print(f'Z3 assertions: {result["constraint_count"]}')
 

@@ -21,7 +21,7 @@ C1 is represented by exactly two bounded integer variables per exam:
 Every loop below instantiates a finite mathematical constraint for the
 corresponding exams, rooms or slots. The resulting quantifier-free formulas
 are submitted to Z3's integer solver. The input parser and optional C7/C8
-metadata are shared with the alternative Boolean formulation.
+metadata are shared with the Boolean and Hybrid formulations.
 """
 
 import argparse
@@ -247,9 +247,9 @@ def print_result(result):
     """Print the coursework output: sat/unsat, the timetable, then the solving time in ms."""
     print(result["status"])
     if result["metadata_mode"] == "baseline":
-        print("Data mode: baseline (synthetic neutral defaults; C7/C8 are nonbinding)")
+        print("Data mode: baseline (neutral C6/C7/C8 defaults)")
     else:
-        print("Data mode: extended (facilities C7 and duration C8)")
+        print("Data mode: extended (C6/C7/C8 metadata)")
     if result["status"] == "sat":
         print("Exam\tTimeslot\tRoom")
         for exam, slot, room in result["timetable"]:
@@ -264,7 +264,7 @@ def print_result(result):
         print(f'Reason: {result["reason_unknown"]}')
     print(f'Solving time (ms): {result["solve_time_ms"]:.3f}')
     print(f'Model construction time (ms): {result["build_time_ms"]:.3f}')
-    print(f'Integer variables: {result["variable_count"]}')
+    print(f'Decision variables: {result["variable_count"]}')
     print(f'Z3 assertions: {result["constraint_count"]}')
 
 

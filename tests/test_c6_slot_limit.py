@@ -1,4 +1,4 @@
-"""Targeted C6 tests for both genuinely different Z3 formulations."""
+"""Targeted C6 tests for all three distinct Z3 formulations."""
 import json
 import unittest
 from pathlib import Path
@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 
 from Formulation1 import solve_integer
 from Formulation2 import solve_boolean
+from Formulation3 import solve_hybrid
 from shared_input import Instance, read_file, prepare_metadata
 from timetable_check import validate_timetable
 
@@ -24,7 +25,7 @@ def example(slots=1, limit=2, exams=2, rooms=3, shared_student=False):
 
 class C6SlotLimitTests(unittest.TestCase):
     def assert_status(self, instance, expected):
-        for solve in (solve_integer, solve_boolean):
+        for solve in (solve_integer, solve_boolean, solve_hybrid):
             with self.subTest(formulation=solve.__name__):
                 result = solve(instance)
                 self.assertEqual(result['status'], expected)

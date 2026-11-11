@@ -1,4 +1,4 @@
-"""Shared input contract for both formulations, with no dependency on Z3.
+"""Shared input contract for all three formulations, with no dependency on Z3.
 
 The text format and enrolment order (exam_id, student_id) follow the supplied
 Moodle template. The optional JSON format is our proposed group extension, including C6 limit.
@@ -33,7 +33,7 @@ class Instance:
 def prepare_metadata(instance):
     """Validate and normalize the four fields, or supply neutral baseline data.
 
-    Calling this from either solver also supports the original Instance class.
+    Calling this from any solver also supports the original Instance class.
     Baseline values are synthetic assumptions, not facts supplied by Moodle.
     Feature matching is case-sensitive; names are not silently corrected.
     """
@@ -150,7 +150,7 @@ def read_file(filename, metadata_filename=None, *, baseline=False):
 def validate_and_index(instance):
     """Validate a programmatic instance and build enrolment indexes for solvers.
 
-    This validates the same input contract for both encodings. Repeated exam/student
+    This validates the same input contract for all three encodings. Repeated exam/student
     registrations count only once. The returned lists contain sets of student IDs
     per exam and exam IDs per student, respectively.
     """

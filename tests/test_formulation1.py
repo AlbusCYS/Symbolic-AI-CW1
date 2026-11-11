@@ -209,7 +209,7 @@ class IntegerSolverTests(unittest.TestCase):
 
 
 def benchmark():
-    """Record one check per input, separating baseline and extended cases."""
+    """Legacy per-formulation benchmark (use compare_three_formulations.py for final results)."""
     rows = []
     paths = sorted((ROOT / "instances").glob("*.txt"))
     paths += sorted((ROOT / "examples").glob("*.txt"))
