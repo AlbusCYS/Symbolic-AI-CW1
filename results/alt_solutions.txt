@@ -1,4 +1,4 @@
-sat1.txt     unique solution
+﻿sat1.txt     unique solution
 sat2.txt     multiple solutions
 sat3.txt     multiple solutions
 sat4.txt     unique solution

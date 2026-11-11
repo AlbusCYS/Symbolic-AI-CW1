@@ -39,6 +39,16 @@ def validate_timetable(instance, timetable):
                 f"C8: exam {exam} is longer than slot {slot}"
             )
 
+    limit = getattr(instance, "max_exams_per_slot", None)
+    if limit is None:
+        limit = instance.number_of_rooms
+    slot_counts = {}
+    for _, slot, _ in timetable:
+        slot_counts[slot] = slot_counts.get(slot, 0) + 1
+    assert all(count <= limit for count in slot_counts.values()), (
+        "C6: too many exams scheduled in one timeslot"
+    )
+
     for student in range(instance.number_of_students):
         exams = {e for e, s in instance.exams_to_students if s == student}
         slots = [slot for exam, slot, _ in timetable if exam in exams]

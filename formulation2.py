@@ -1,7 +1,7 @@
 """Boolean exam timetabling for the group's C1-C8 constraints.
 
 X[e, t, r] means exam e uses timeslot t and room r. IDs are zero-based.
-C7 requires all exam facilities; C8 fits each exam within its single slot.
+C6 limits simultaneous exams; C7 requires all exam facilities; C8 fits exam duration.
 Derived from the supplied Moodle template; the Boolean model and JSON
 extension are additions. See SHARED.md for the common input contract.
 """
@@ -40,7 +40,7 @@ def solve_boolean(instance):
         for room in range(rooms)
     }
 
-    # C1 and C2: exactly one (timeslot, room) pair for every exam.
+    # C1: exactly one (timeslot, room) pair for every exam.
     for exam in range(exams):
         choices = [X[exam, slot, room]
                    for slot in range(slots) for room in range(rooms)]
@@ -49,7 +49,7 @@ def solve_boolean(instance):
         else:
             solver.add(False)
 
-    # C3: a room can host at most one exam in a timeslot.
+    # C2: a room can host at most one exam in a timeslot.
     if exams > 1:
         for slot in range(slots):
             for room in range(rooms):
@@ -57,7 +57,7 @@ def solve_boolean(instance):
                     *[X[exam, slot, room] for exam in range(exams)], 1
                 ))
 
-    # C4: rule out assignments to rooms that cannot hold the enrolment.
+    # C3: rule out assignments to rooms that cannot hold the enrolment.
     for exam in range(exams):
         for room in range(rooms):
             if len(exam_students[exam]) > instance.room_capacities[room]:
@@ -72,8 +72,8 @@ def solve_boolean(instance):
                 for slot in range(slots):
                     solver.add(z3.Not(X[exam, slot, room]))
 
-    # C8: an exam must fit within one slot. Equality is allowed. C1/C2 still
-    # prevent splitting across slots; C3 still reserves the room for the slot.
+    # C8: an exam must fit within one slot. Equality is allowed. C1 still
+    # prevent splitting across slots; C2 still reserves the room for the slot.
     for exam in range(exams):
         for slot in range(slots):
             if instance.exam_durations[exam] > instance.slot_durations[slot]:
@@ -92,19 +92,26 @@ def solve_boolean(instance):
             continue
         registered_exams = sorted(registered_exams)
 
-        # C6: the student's exams cannot share a slot, even in different rooms.
+        # C5: the student's exams cannot share a slot, even in different rooms.
         for slot in range(slots):
             solver.add(z3.AtMost(
                 *[in_slot[exam, slot] for exam in registered_exams], 1
             ))
 
-        # C5: the student cannot be busy in two adjacent ordered slots.
+        # C4: the student cannot be busy in two adjacent ordered slots.
         busy = [
             z3.Or([in_slot[exam, slot] for exam in registered_exams])
             for slot in range(slots)
         ]
         for first, second in zip(busy, busy[1:]):
             solver.add(z3.Not(z3.And(first, second)))
+
+    # C6: bound the total number of exams across ALL rooms in a slot.
+    for slot in range(slots):
+        assignments = [X[exam, slot, room]
+                       for exam in range(exams) for room in range(rooms)]
+        solver.add(z3.Sum([z3.If(x, 1, 0) for x in assignments])
+                   <= instance.max_exams_per_slot)
 
     build_time_ms = (perf_counter() - build_start) * 1000
     check_start = perf_counter()

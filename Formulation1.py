@@ -4,23 +4,19 @@ The coursework asks for five main constraints and at least three additional
 constraints. This implementation labels them C1-C8:
 
 Main constraints:
-    C1  every exam receives exactly one timeslot;
-    C2  every exam receives exactly one room;
-    C3  a room is used by at most one exam in a slot;
-    C4  a room must have enough capacity for its exam; and
-    C5  a student cannot sit exams in consecutive slots.
+    C1  exactly one (timeslot, room) assignment per exam;
+    C2  at most one exam per (room, timeslot);
+    C3  enrolment does not exceed room capacity;
+    C4  student exams cannot occupy adjacent slots;
+    C5  student exams cannot occupy the same slot.
 
 Additional constraints:
-    C6  exams sharing a student cannot use the same slot;
-    C7  the selected room must provide every required exam facility; and
-    C8  the selected slot must be long enough for the exam.
+    C6  each slot holds at most max_exams_per_slot exams;
+    C7  each room meets the assigned exam's facility requirements;
+    C8  each exam fits within its assigned slot's duration.
 
-The first five labels provide the coursework's five main constraints. C6-C8
-provide three explicit extensions beyond those rules. C1 and C2 are encoded
-together by the two bounded integer variables for each exam:
-
-    slot[e] in {0, ..., T-1}  -- the selected timeslot
-    room[e] in {0, ..., R-1}  -- the selected room
+C1 is represented by exactly two bounded integer variables per exam:
+    slot[e] in {0, ..., T-1}, room[e] in {0, ..., R-1}.
 
 Every loop below instantiates a finite mathematical constraint for the
 corresponding exams, rooms or slots. The resulting quantifier-free formulas
@@ -42,7 +38,7 @@ def validate_and_index(instance):
     """Return distinct exam enrolments and shared-student exam pairs.
 
     The input validation is shared with the Boolean formulation, while this
-    encoding keeps its own pair-based constraints for C5 and C6.
+    encoding keeps its own pair-based constraints for C4 and C5.
     """
     exam_students, student_exams = index_instance(instance)
     pairs = set()
@@ -51,7 +47,7 @@ def validate_and_index(instance):
     return [len(students) for students in exam_students], sorted(pairs)
 
 
-def add_c1_c2_domains(solver, slot, room, n_slots, n_rooms):
+def add_c1_domains(solver, slot, room, n_slots, n_rooms):
     """Apply the finite domains for the two integer decisions per exam.
 
     Each exam has one integer ``slot[e]`` and one integer ``room[e]``. The
@@ -62,7 +58,7 @@ def add_c1_c2_domains(solver, slot, room, n_slots, n_rooms):
         solver.add(s >= 0, s < n_slots, r >= 0, r < n_rooms)
 
 
-def add_c3_room_clash(solver, slot, room):
+def add_c2_room_clash(solver, slot, room):
     """Prevent two different exams sharing a room and slot.
 
     For every pair ``a < b`` this adds
@@ -73,7 +69,7 @@ def add_c3_room_clash(solver, slot, room):
         solver.add(z3.Or(room[a] != room[b], slot[a] != slot[b]))
 
 
-def add_c4_capacity(solver, room, enrolment, capacities):
+def add_c3_capacity(solver, room, enrolment, capacities):
     """Reject rooms whose capacity is smaller than the exam enrolment."""
     for e, n in enumerate(enrolment):
         for r, cap in enumerate(capacities):
@@ -81,7 +77,7 @@ def add_c4_capacity(solver, room, enrolment, capacities):
                 solver.add(room[e] != r)
 
 
-def add_c5_no_consecutive(solver, slot, pairs):
+def add_c4_no_consecutive(solver, slot, pairs):
     """Prevent a student from sitting exams in adjacent slot indices.
 
     For each pair of exams sharing a student, both directed differences are
@@ -93,10 +89,16 @@ def add_c5_no_consecutive(solver, slot, pairs):
         solver.add(slot[a] - slot[b] != 1, slot[b] - slot[a] != 1)
 
 
-def add_c6_no_same_slot(solver, slot, pairs):
-    """Additional constraint: shared-student exams cannot use one slot."""
+def add_c5_no_same_slot(solver, slot, pairs):
+    """A student must not sit multiple exams in the same slot."""
     for a, b in pairs:
         solver.add(slot[a] != slot[b])
+
+
+def add_c6_slot_limit(solver, slot, n_slots, max_exams_per_slot):
+    """C6: at most the configured number of exams run in each timeslot."""
+    for t in range(n_slots):
+        solver.add(z3.Sum([z3.If(s == t, 1, 0) for s in slot]) <= max_exams_per_slot)
 
 
 def add_c7_facilities(solver, room, instance):
@@ -136,10 +138,10 @@ def verify(instance, timetable):
     where = {}
     for e, t, r in timetable:
         if e in where:
-            errors.append(f"C1/C2: exam {e} appears more than once")
+            errors.append(f"C1: exam {e} appears more than once")
         where[e] = (t, r)
     if sorted(where) != list(range(instance.number_of_exams)):
-        errors.append("C1/C2: not every exam is scheduled exactly once")
+        errors.append("C1: not every exam is scheduled exactly once")
         return errors
 
     used = {}
@@ -148,23 +150,29 @@ def verify(instance, timetable):
             errors.append(f"C1: exam {e} slot {t} out of range")
             continue
         if not 0 <= r < instance.number_of_rooms:
-            errors.append(f"C2: exam {e} room {r} out of range")
+            errors.append(f"C1: exam {e} room {r} out of range")
             continue
         if (t, r) in used:
-            errors.append(f"C3: exams {used[(t, r)]} and {e} share room {r} in slot {t}")
+            errors.append(f"C2: exams {used[(t, r)]} and {e} share room {r} in slot {t}")
         used[(t, r)] = e
         if instance.room_capacities[r] < enrolment[e]:
-            errors.append(f"C4: exam {e} ({enrolment[e]} students) exceeds room {r}")
+            errors.append(f"C3: exam {e} ({enrolment[e]} students) exceeds room {r}")
         if not instance.exam_requirements[e].issubset(instance.room_facilities[r]):
             errors.append(f"C7: room {r} lacks facilities for exam {e}")
         if instance.exam_durations[e] > instance.slot_durations[t]:
             errors.append(f"C8: exam {e} does not fit slot {t}")
+    by_slot = {}
+    for e, (t, _) in where.items():
+        by_slot[t] = by_slot.get(t, 0) + 1
+    for t, count in by_slot.items():
+        if count > instance.max_exams_per_slot:
+            errors.append(f"C6: slot {t} has {count} exams; max is {instance.max_exams_per_slot}")
     for a, b in pairs:
         d = abs(where[a][0] - where[b][0])
         if d == 1:
-            errors.append(f"C5: exams {a} and {b} share a student and are in adjacent slots")
+            errors.append(f"C4: exams {a} and {b} share a student and are in adjacent slots")
         elif d == 0:
-            errors.append(f"C6: exams {a} and {b} share a student and the same slot")
+            errors.append(f"C5: exams {a} and {b} share a student and the same slot")
     return errors
 
 
@@ -190,11 +198,12 @@ def solve_integer(instance, check_alternatives=False):
     room = [z3.Int(f"room_{e}") for e in range(exams)]
 
     solver = z3.Solver()
-    add_c1_c2_domains(solver, slot, room, instance.number_of_slots, instance.number_of_rooms)
-    add_c3_room_clash(solver, slot, room)
-    add_c4_capacity(solver, room, enrolment, instance.room_capacities)
-    add_c5_no_consecutive(solver, slot, pairs)
-    add_c6_no_same_slot(solver, slot, pairs)
+    add_c1_domains(solver, slot, room, instance.number_of_slots, instance.number_of_rooms)
+    add_c2_room_clash(solver, slot, room)
+    add_c3_capacity(solver, room, enrolment, instance.room_capacities)
+    add_c4_no_consecutive(solver, slot, pairs)
+    add_c5_no_same_slot(solver, slot, pairs)
+    add_c6_slot_limit(solver, slot, instance.number_of_slots, instance.max_exams_per_slot)
     add_c7_facilities(solver, room, instance)
     add_c8_duration(solver, slot, instance)
     build_time_ms = (perf_counter() - build_start) * 1000

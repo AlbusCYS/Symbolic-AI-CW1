@@ -1,7 +1,7 @@
 """Shared input contract for both formulations, with no dependency on Z3.
 
 The text format and enrolment order (exam_id, student_id) follow the supplied
-Moodle template. The optional JSON format is our proposed group extension.
+Moodle template. The optional JSON format is our proposed group extension, including C6 limit.
 """
 
 import json
@@ -27,6 +27,7 @@ class Instance:
         self.exam_durations = None
         self.slot_durations = None
         self.metadata_mode = None
+        self.max_exams_per_slot = None
 
 
 def prepare_metadata(instance):
@@ -78,6 +79,14 @@ def prepare_metadata(instance):
 
     for name, value in zip(METADATA_FIELDS, normalized):
         setattr(instance, name, value)
+    # C6 is a separately configurable extension. The default is nonbinding:
+    # C2 already forbids scheduling more simultaneous exams than rooms.
+    limit = getattr(instance, "max_exams_per_slot", None)
+    if limit is None:
+        limit = instance.number_of_rooms
+    if type(limit) is not int or limit < 0:
+        raise ValueError("max_exams_per_slot must be a non-negative integer.")
+    instance.max_exams_per_slot = limit
     instance.metadata_mode = mode
     return instance
 
@@ -86,12 +95,16 @@ def load_metadata(instance, filename):
     """Apply a complete JSON file; invalid input is an error, not UNSAT."""
     with open(filename, encoding="utf-8") as handle:
         metadata = json.load(handle)
-    if not isinstance(metadata, dict) or set(metadata) != set(METADATA_FIELDS):
-        raise ValueError("Metadata JSON must contain exactly: " + ", ".join(METADATA_FIELDS))
+    valid_keys = set(METADATA_FIELDS) | {"max_exams_per_slot"}
+    if not isinstance(metadata, dict) or not set(METADATA_FIELDS).issubset(metadata) or not set(metadata).issubset(valid_keys):
+        raise ValueError("Metadata JSON must contain all four C7/C8 fields and optionally max_exams_per_slot.")
     for name in METADATA_FIELDS:
         setattr(instance, name, metadata[name])
     if any(metadata[name] is None for name in METADATA_FIELDS):
         raise ValueError("Metadata fields cannot be null.")
+    instance.max_exams_per_slot = (metadata["max_exams_per_slot"]
+                                   if "max_exams_per_slot" in metadata
+                                   else instance.number_of_rooms)
     instance.metadata_mode = "extended"
     return prepare_metadata(instance)
 
@@ -100,7 +113,7 @@ def read_file(filename, metadata_filename=None, *, baseline=False):
     """Read the original .txt file and, by default, its <stem>.extra.json.
 
     An explicitly supplied metadata path must exist. baseline=True deliberately
-    ignores a companion file and uses the neutral C1-C6-equivalent assumptions.
+    ignores a companion file and uses nonbinding C6-C8 baseline assumptions.
     """
     if baseline and metadata_filename is not None:
         raise ValueError("Choose either baseline mode or a metadata file.")
