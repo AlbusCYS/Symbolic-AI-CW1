@@ -3,7 +3,7 @@
 X[e, t, r] means exam e uses timeslot t and room r. IDs are zero-based.
 C7 requires all exam facilities; C8 fits each exam within its single slot.
 Derived from the supplied Moodle template; the Boolean model and JSON
-extension are additions. See SHARED_CONTRACT.md for the integer teammate.
+extension are additions. See SHARED.md for the common input contract.
 """
 
 import argparse
@@ -13,7 +13,7 @@ from time import perf_counter
 import z3
 
 # Re-export these names to preserve the earlier solver's import interface.
-from shared_input import Instance, prepare_metadata, read_file
+from shared_input import Instance, prepare_metadata, read_file, validate_and_index
 
 
 def solve_boolean(instance):
@@ -30,26 +30,7 @@ def solve_boolean(instance):
     slots = instance.number_of_slots
     rooms = instance.number_of_rooms
 
-    if any(type(count) is not int or count < 0
-           for count in (students, exams, slots, rooms)):
-        raise ValueError("Student, exam, slot and room counts must be non-negative integers.")
-    if len(instance.room_capacities) != rooms:
-        raise ValueError("Provide exactly one capacity for each room.")
-    if any(type(capacity) is not int or capacity < 0
-           for capacity in instance.room_capacities):
-        raise ValueError("Room capacities must be non-negative integers.")
-    prepare_metadata(instance)
-
-    exam_students = [set() for _ in range(exams)]
-    student_exams = [set() for _ in range(students)]
-    for exam, student in instance.exams_to_students:
-        if not (type(exam) is int and type(student) is int
-                and 0 <= exam < exams and 0 <= student < students):
-            raise ValueError(
-                f"Registration ({exam}, {student}) contains an out-of-range ID."
-            )
-        exam_students[exam].add(student)
-        student_exams[student].add(exam)
+    exam_students, student_exams = validate_and_index(instance)
 
     solver = z3.Solver()
     X = {

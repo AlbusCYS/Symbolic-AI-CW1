@@ -43,7 +43,7 @@ import z3
 # Loading the two formulations
 # --------------------------------------------------------------------------
 def load_module(path, name):
-    """Import a .py file by path (needed because 'Formulation 1.py' has a space)."""
+    """Import a .py file by path (supports loading solver modules by explicit file path)."""
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
@@ -54,15 +54,13 @@ def load_module(path, name):
 def load_formulations(f1_dir, f2_dir):
     """Return (solve_integer, solve_boolean, read_file, validate_timetable, Instance, prepare_metadata)."""
     f1_dir, f2_dir = Path(f1_dir).resolve(), Path(f2_dir).resolve()
-    # Both folders ship identical shared_input.py / timetable_check.py, so the
-    # F1 copies are used for both solvers (guarantees identical input handling).
+    # Both formulations use the same shared input and timetable checker.
     sys.path.insert(0, str(f1_dir))
     from shared_input import Instance, prepare_metadata, read_file
     from timetable_check import validate_timetable
-    f1_file = next(f1_dir.glob("Formulation*1*.py"))
-    f1 = load_module(f1_file, "formulation1")
+    f1 = load_module(f1_dir / "Formulation1.py", "Formulation1")
     sys.path.insert(0, str(f2_dir))
-    f2 = load_module(f2_dir / "formulation2.py", "formulation2")
+    f2 = load_module(f2_dir / "Formulation2.py", "Formulation2")
     return f1.solve_integer, f2.solve_boolean, read_file, validate_timetable, Instance, prepare_metadata
 
 
@@ -97,10 +95,10 @@ def summarise(values):
             statistics.pstdev(values) if len(values) > 1 else 0.0)
 
 
-def benchmark_file(path, name1, name2, fns, repeats, baseline):
+def benchmark_file(path, name, fns, repeats, baseline):
     """Run one instance through both formulations `repeats` times."""
     solve_int, solve_bool, read_file, validate, _, _ = fns
-    row = {"instance": name1, "mode": "baseline" if baseline else "extended",
+    row = {"instance": name, "mode": "baseline" if baseline else "extended",
            "expected": expected_status(path)}
     for tag, solver_fn in (("f1", solve_int), ("f2", solve_bool)):
         solve_ms, build_ms, statuses, verdicts = [], [], set(), set()
@@ -216,8 +214,8 @@ def write_markdown(path, main_rows, scale_rows, repeats, timeout_ms):
     body = [[r["instance"], r["mode"], r["expected"], r["f1_status"], ok(r, "f1"),
              f"{r['f1_mean_ms']:.2f}", r["f2_status"], ok(r, "f2"), f"{r['f2_mean_ms']:.2f}",
              "yes" if r["agree"] else "NO",
-             "valid" if "valid" in (r["f1_valid"] + r["f2_valid"]) and "INVALID" not in
-             (r["f1_valid"] + r["f2_valid"]) else ("n/a" if r["expected"] == "unsat" else "CHECK")]
+             "valid" if r["f1_valid"] == r["f2_valid"] == "valid"
+              else ("n/a" if r["expected"] == "unsat" else "CHECK")]
             for r in main_rows]
     out.append("## Correctness and timing\n")
     out.append(markdown_table(
@@ -233,7 +231,7 @@ def write_markdown(path, main_rows, scale_rows, repeats, timeout_ms):
     out.append(markdown_table(
         ["Instance", "F1 vars", "F1 assertions", "F2 vars", "F2 assertions"],
         [[r["instance"], r["f1_vars"], r["f1_assertions"], r["f2_vars"], r["f2_assertions"]]
-         for r in main_rows if r["mode"] == "baseline" or True]))
+         for r in main_rows]))
     if scale_rows:
         out.append(f"\n\n## Scalability on generated instances (timeout {timeout_ms} ms)\n")
         out.append(markdown_table(
@@ -307,8 +305,8 @@ def make_charts(out_dir, main_rows, scale_rows):
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--f1", required=True, help="folder containing 'Formulation 1.py'")
-    parser.add_argument("--f2", required=True, help="folder containing formulation2.py")
+    parser.add_argument("--f1", required=True, help="folder containing Formulation1.py")
+    parser.add_argument("--f2", required=True, help="folder containing Formulation2.py")
     parser.add_argument("--repeats", type=int, default=10)
     parser.add_argument("--scale-repeats", type=int, default=3)
     parser.add_argument("--timeout-ms", type=int, default=20000)
@@ -325,13 +323,14 @@ def main():
     first = sorted((f1_dir / "instances").glob("sat1.txt"))
     if first:
         inst = fns[2](str(first[0]))
-        fns[0](inst), fns[1](inst)
+        fns[0](inst)
+        fns[1](fns[2](str(first[0])))
 
     main_rows = []
     print("Official instances (baseline data):")
     for path in sorted((f1_dir / "instances").glob("*.txt"),
                        key=lambda p: (p.name.startswith("unsat"), int("".join(c for c in p.stem if c.isdigit())))):
-        row = benchmark_file(path, f"instances/{path.name}", None, fns, args.repeats, True)
+        row = benchmark_file(path, f"instances/{path.name}", fns, args.repeats, True)
         main_rows.append(row)
         print(f"  {path.name:<14} exp={row['expected']:<5} F1={row['f1_status']:<5} "
               f"F2={row['f2_status']:<5} agree={row['agree']} "
@@ -339,7 +338,7 @@ def main():
 
     print("Extended examples (C7 facilities + C8 durations):")
     for path in sorted((f1_dir / "examples").glob("*.txt")):
-        row = benchmark_file(path, f"examples/{path.name}", None, fns, args.repeats, False)
+        row = benchmark_file(path, f"examples/{path.name}", fns, args.repeats, False)
         main_rows.append(row)
         print(f"  {path.name:<34} exp={row['expected']:<5} F1={row['f1_status']:<5} "
               f"F2={row['f2_status']:<5} agree={row['agree']}", flush=True)
@@ -351,16 +350,21 @@ def main():
                                  seeds=[1, 2, 3], repeats=args.scale_repeats,
                                  timeout_ms=args.timeout_ms)
 
+    bad = [r["instance"] for r in main_rows
+           if not (r["agree"] and r["f1_correct"] and r["f2_correct"])
+           or "INVALID" in r["f1_valid"] + r["f2_valid"]
+           or (r["expected"] == "sat" and
+               (r["f1_valid"] != "valid" or r["f2_valid"] != "valid"))]
+    if bad:
+        raise SystemExit(f"Correctness checks failed; saved results unchanged: {bad}")
+
     write_csv(out_dir / "results_main.csv", main_rows)
     if scale_rows:
         write_csv(out_dir / "results_scalability.csv", scale_rows)
     write_markdown(out_dir / "summary.md", main_rows, scale_rows, args.repeats, args.timeout_ms)
     make_charts(out_dir, main_rows, scale_rows)
 
-    bad = [r["instance"] for r in main_rows
-           if not (r["agree"] and r["f1_correct"] and r["f2_correct"])
-           or "INVALID" in r["f1_valid"] + r["f2_valid"]]
-    print("\nAll checks passed." if not bad else f"\nPROBLEMS in: {bad}")
+    print("\nAll checks passed.")
     print(f"Results written to {out_dir.resolve()}")
 
 

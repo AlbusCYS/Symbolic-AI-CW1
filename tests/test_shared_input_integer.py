@@ -9,7 +9,7 @@ import unittest
 from shared_input import load_metadata, read_file
 
 ROOT = Path(__file__).resolve().parent.parent
-SOLVER_PATH = ROOT / "Formulation 1.py"
+SOLVER_PATH = ROOT / "Formulation1.py"
 SPEC = importlib.util.spec_from_file_location("formulation1", SOLVER_PATH)
 FORMULATION1 = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None

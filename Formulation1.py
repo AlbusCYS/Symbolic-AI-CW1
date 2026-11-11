@@ -35,48 +35,20 @@ from time import perf_counter
 
 import z3
 
-from shared_input import Instance, prepare_metadata, read_file  # noqa: F401 (shared input API)
+from shared_input import Instance, read_file, validate_and_index as index_instance
 
 
 def validate_and_index(instance):
-    """Validate input and pre-compute data needed by the integer formulation.
+    """Return distinct exam enrolments and shared-student exam pairs.
 
-    Invalid input raises ValueError rather than being incorrectly reported as
-    ``unsat``. The returned values are:
-
-    ``enrolment[e]``
-        Number of distinct students registered for exam ``e``. This is the
-        value used by the room-capacity constraint.
-
-    ``pairs``
-        Sorted exam pairs ``(a, b)`` with ``a < b`` that share at least one
-        student. A pair is stored once even if several students share both
-        exams, avoiding duplicate C5/C6 constraint instances.
+    The input validation is shared with the Boolean formulation, while this
+    encoding keeps its own pair-based constraints for C5 and C6.
     """
-    students, exams = instance.number_of_students, instance.number_of_exams
-    slots, rooms = instance.number_of_slots, instance.number_of_rooms
-
-    if any(type(n) is not int or n < 0 for n in (students, exams, slots, rooms)):
-        raise ValueError("Student, exam, slot and room counts must be non-negative integers.")
-    if len(instance.room_capacities) != rooms:
-        raise ValueError("Provide exactly one capacity for each room.")
-    if any(type(c) is not int or c < 0 for c in instance.room_capacities):
-        raise ValueError("Room capacities must be non-negative integers.")
-    prepare_metadata(instance)
-
-    exam_students = [set() for _ in range(exams)]
-    student_exams = [set() for _ in range(students)]
-    for exam, student in instance.exams_to_students:
-        if not (type(exam) is int and type(student) is int
-                and 0 <= exam < exams and 0 <= student < students):
-            raise ValueError(f"Registration ({exam}, {student}) contains an out-of-range ID.")
-        exam_students[exam].add(student)
-        student_exams[student].add(exam)
-
+    exam_students, student_exams = index_instance(instance)
     pairs = set()
     for registered in student_exams:
         pairs.update(combinations(sorted(registered), 2))
-    return [len(s) for s in exam_students], sorted(pairs)
+    return [len(students) for students in exam_students], sorted(pairs)
 
 
 def add_c1_c2_domains(solver, slot, room, n_slots, n_rooms):
@@ -240,7 +212,11 @@ def solve_integer(instance, check_alternatives=False):
             # Block the complete first assignment, then search for another one.
             solver.push()
             solver.add(z3.Or([v != model.eval(v, model_completion=True) for v in slot + room]))
-            alternative = solver.check() == z3.sat
+            alternative_status = solver.check()
+            alternative = (
+                True if alternative_status == z3.sat else
+                False if alternative_status == z3.unsat else None
+            )
             solver.pop()
         elif check_alternatives:
             alternative = False
@@ -269,7 +245,12 @@ def print_result(result):
         print("Exam\tTimeslot\tRoom")
         for exam, slot, room in result["timetable"]:
             print(f"{exam}\t{slot}\t{room}")
-        print("Multiple solutions exist" if result["alternative_exists"] else "Solution is unique")
+        if result["alternative_exists"] is True:
+            print("Multiple solutions exist")
+        elif result["alternative_exists"] is False:
+            print("Solution is unique")
+        else:
+            print("Alternative solutions not checked")
     elif result["status"] == "unknown":
         print(f'Reason: {result["reason_unknown"]}')
     print(f'Solving time (ms): {result["solve_time_ms"]:.3f}')

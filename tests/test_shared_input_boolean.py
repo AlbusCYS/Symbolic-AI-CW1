@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from formulation2 import solve_boolean
+from Formulation2 import solve_boolean
 from shared_input import load_metadata, read_file
 from tests.test_formulation2 import ROOT, make_instance
 

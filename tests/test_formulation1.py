@@ -14,7 +14,7 @@ import importlib.util
 import z3
 
 ROOT = Path(__file__).resolve().parent.parent
-SOLVER_PATH = ROOT / "Formulation 1.py"
+SOLVER_PATH = ROOT / "Formulation1.py"
 SPEC = importlib.util.spec_from_file_location("formulation1", SOLVER_PATH)
 FORMULATION1 = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
@@ -154,7 +154,7 @@ class IntegerSolverTests(unittest.TestCase):
         env = os.environ.copy()
         env["PYTHONPATH"] = str(Path(z3.__file__).resolve().parent.parent)
         completed = subprocess.run(
-            [sys.executable, str(ROOT / "Formulation 1.py"),
+            [sys.executable, str(ROOT / "Formulation1.py"),
              str(ROOT / "instances" / "sat1.txt")],
             capture_output=True, text=True, env=env, check=False,
         )
@@ -167,7 +167,7 @@ class IntegerSolverTests(unittest.TestCase):
         env = os.environ.copy()
         env["PYTHONPATH"] = str(Path(z3.__file__).resolve().parent.parent)
         completed = subprocess.run(
-            [sys.executable, str(ROOT / "Formulation 1.py"),
+            [sys.executable, str(ROOT / "Formulation1.py"),
              str(ROOT / "instances" / "unsat1.txt")],
             capture_output=True, text=True, env=env, check=False,
         )

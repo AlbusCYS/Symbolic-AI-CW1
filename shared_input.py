@@ -132,3 +132,37 @@ def read_file(filename, metadata_filename=None, *, baseline=False):
     if not baseline and companion.exists():
         return load_metadata(instance, companion)
     return prepare_metadata(instance)
+
+
+def validate_and_index(instance):
+    """Validate a programmatic instance and build enrolment indexes for solvers.
+
+    This validates the same input contract for both encodings. Repeated exam/student
+    registrations count only once. The returned lists contain sets of student IDs
+    per exam and exam IDs per student, respectively.
+    """
+    students = instance.number_of_students
+    exams = instance.number_of_exams
+    slots = instance.number_of_slots
+    rooms = instance.number_of_rooms
+    if any(type(value) is not int or value < 0
+           for value in (students, exams, slots, rooms)):
+        raise ValueError("Student, exam, slot and room counts must be non-negative integers.")
+    if len(instance.room_capacities) != rooms:
+        raise ValueError("Provide exactly one capacity for each room.")
+    if any(type(capacity) is not int or capacity < 0
+           for capacity in instance.room_capacities):
+        raise ValueError("Room capacities must be non-negative integers.")
+
+    prepare_metadata(instance)
+    exam_students = [set() for _ in range(exams)]
+    student_exams = [set() for _ in range(students)]
+    for exam, student in instance.exams_to_students:
+        if not (type(exam) is int and type(student) is int
+                and 0 <= exam < exams and 0 <= student < students):
+            raise ValueError(
+                f"Registration ({exam}, {student}) contains an out-of-range ID."
+            )
+        exam_students[exam].add(student)
+        student_exams[student].add(exam)
+    return exam_students, student_exams

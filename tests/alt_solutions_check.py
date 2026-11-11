@@ -1,26 +1,69 @@
-"""Multiple-solution test for Formulation 1 (the integer solver).
 
-After the first model is found, Formulation 1 blocks that exact slot/room
-assignment and calls check() again. A second 'sat' means another timetable
-exists; 'unsat' means the first timetable is the only one.
+"""Check whether satisfiable official instances have multiple timetables.
 
-Usage: python alt_solutions_check.py --f1 path/to/formulation1_folder
+Run from the repository root:
+    python tests/alt_solutions_check.py --f1 .
 """
-import argparse, importlib.util, re, sys
+
+import argparse
+import importlib.util
+import re
+import sys
 from pathlib import Path
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--f1", required=True)
-folder = Path(parser.parse_args().f1).resolve()
-sys.path.insert(0, str(folder))
-from shared_input import read_file
 
-spec = importlib.util.spec_from_file_location("f1", next(folder.glob("Formulation*1*.py")))
-f1 = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(f1)
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--f1",
+        required=True,
+        help="Folder containing Formulation1.py",
+    )
+    args = parser.parse_args()
 
-files = sorted((folder / "instances").glob("sat*.txt"),
-               key=lambda p: int(re.findall(r"\d+", p.name)[0]))
-for path in files:
-    result = f1.solve_integer(read_file(str(path)), check_alternatives=True)
-    print(f"{path.name:<12} {'multiple solutions' if result['alternative_exists'] else 'unique solution'}")
+    folder = Path(args.f1).resolve()
+    solver_file = folder / "Formulation1.py"
+
+    if not solver_file.is_file():
+        parser.error(f"Cannot find {solver_file}")
+
+    sys.path.insert(0, str(folder))
+    from shared_input import read_file
+
+    spec = importlib.util.spec_from_file_location(
+        "Formulation1", solver_file
+    )
+
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load {solver_file}")
+
+    solver = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(solver)
+
+    files = sorted(
+        (folder / "instances").glob("sat*.txt"),
+        key=lambda path: int(
+            re.search(r"\d+", path.stem).group()
+        ),
+    )
+
+    for path in files:
+        result = solver.solve_integer(
+            read_file(path),
+            check_alternatives=True,
+        )
+
+        if result["status"] != "sat":
+            label = f"unexpected status: {result['status']}"
+        else:
+            label = {
+                True: "multiple solutions",
+                False: "unique solution",
+                None: "alternative status unknown",
+            }[result["alternative_exists"]]
+
+        print(f"{path.name:<12} {label}")
+
+
+if __name__ == "__main__":
+    main()

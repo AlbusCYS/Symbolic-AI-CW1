@@ -12,7 +12,7 @@ import unittest
 
 import z3
 
-from formulation2 import Instance, read_file, solve_boolean
+from Formulation2 import Instance, read_file, solve_boolean
 from timetable_check import validate_timetable
 
 
@@ -146,7 +146,7 @@ class BooleanSolverTests(unittest.TestCase):
         env = os.environ.copy()
         env["PYTHONPATH"] = str(Path(z3.__file__).resolve().parent.parent)
         completed = subprocess.run(
-            [sys.executable, str(ROOT / "formulation2.py"),
+            [sys.executable, str(ROOT / "Formulation2.py"),
              str(ROOT / "instances" / "sat1.txt")],
             capture_output=True, text=True, env=env, check=False,
         )
@@ -159,7 +159,7 @@ class BooleanSolverTests(unittest.TestCase):
         env = os.environ.copy()
         env["PYTHONPATH"] = str(Path(z3.__file__).resolve().parent.parent)
         completed = subprocess.run(
-            [sys.executable, str(ROOT / "formulation2.py"),
+            [sys.executable, str(ROOT / "Formulation2.py"),
              str(ROOT / "instances" / "unsat1.txt")],
             capture_output=True, text=True, env=env, check=False,
         )
